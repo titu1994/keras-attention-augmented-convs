@@ -5,7 +5,6 @@ from keras.layers import concatenate
 from keras import initializers
 from keras import backend as K
 
-
 import tensorflow as tf
 
 
@@ -14,18 +13,67 @@ def _conv_layer(filters, kernel_size, strides=(1, 1), padding='same', name=None)
                   use_bias=False, kernel_initializer='he_normal', name=name)
 
 
+def _normalize_depth_vars(depth_k, depth_v, input_shape):
+    """
+    Accepts depth_k and depth_v as either floats or integers
+    and normalizes them to integers.
+
+    Args:
+        depth_k: float or int.
+        depth_v: float or int.
+        input_shape: tuple of ints and None.
+
+    Returns:
+        depth_k, depth_v as integers.
+    """
+    channel_axis = 1 if K.image_data_format() == 'channels_first' else -1
+
+    if type(depth_k) == float:
+        depth_k = int(input_shape[channel_axis] * depth_k)
+    else:
+        depth_k = int(depth_k)
+
+    if type(depth_v) == float:
+        depth_v = int(input_shape[channel_axis] * depth_v)
+    else:
+        depth_v = int(depth_v)
+
+    return depth_k, depth_v
+
+
 class AttentionAugmentation(Layer):
 
-    def __init__(self, depth_k, depth_v, num_heads, relative=True, strides=(1, 1), **kwargs):
+    def __init__(self, depth_k, depth_v, num_heads, relative=True, **kwargs):
+        """
+        Applies attention augmentation on a convolutional layer
+        output.
+
+        Args:
+            depth_k: float or int. Number of filters for k.
+            depth_v: float or int. Number of filters for v.
+            num_heads: Number of attention heads. Must divide depth_k
+                and depth_v perfectly.
+            relative: bool, whether to use relative encodings.
+
+        Raises:
+            ValueError: if depth_v or depth_k is not divisible by
+                num_heads.
+
+        Returns:
+            Output tensor of shape
+            -   [Batch, Height, Width, Depth_V] if
+                channels_last data format.
+            -   [Batch, Depth_V, Height, Width] if
+                channels_first data format.
+        """
         super(AttentionAugmentation, self).__init__(**kwargs)
 
-        if type(depth_k) != int:
-            raise ValueError("Depth k must be an integer number of filters !")
+        if depth_k % num_heads != 0:
+            raise ValueError('`depth_k` is not divisible by `num_heads`')
 
-        if type(depth_v) != int:
-            raise ValueError("Depth v must be an integer number of filters !")
+        if depth_v % num_heads != 0:
+            raise ValueError('`depth_v` is not divisible by `num_heads`')
 
-        self.strides = strides
         self.depth_k = depth_k
         self.depth_v = depth_v
         self.num_heads = num_heads
@@ -36,20 +84,27 @@ class AttentionAugmentation(Layer):
     def build(self, input_shape):
         self._shape = input_shape
 
+        # normalize the format of depth_v and depth_k
+        self.depth_k, self.depth_v = _normalize_depth_vars(self.depth_k, self.depth_v,
+                                                           input_shape)
+
         if self.axis == 1:
             _, channels, height, width = input_shape
         else:
             _, height, width, channels = input_shape
 
         if self.relative:
-            dk_heads = self.depth_k // self.num_heads
+            dk_per_head = self.depth_k // self.num_heads
+
             self.key_relative_w = self.add_weight('key_rel_w',
-                                                  shape=[2 * width - 1, dk_heads],
-                                                  initializer=initializers.RandomNormal(stddev=dk_heads ** -0.5))
+                                                  shape=[2 * width - 1, dk_per_head],
+                                                  initializer=initializers.RandomNormal(
+                                                      stddev=dk_per_head ** -0.5))
 
             self.key_relative_h = self.add_weight('key_rel_h',
-                                                  shape=[2 * height - 1, dk_heads],
-                                                  initializer=initializers.RandomNormal(stddev=dk_heads ** -0.5))
+                                                  shape=[2 * height - 1, dk_per_head],
+                                                  initializer=initializers.RandomNormal(
+                                                      stddev=dk_per_head ** -0.5))
 
         else:
             self.key_relative_w = None
@@ -66,19 +121,21 @@ class AttentionAugmentation(Layer):
         k = self.split_heads_2d(k)
         v = self.split_heads_2d(v)
 
-        depth_k_heads = self.depth_k / self.num_heads
-
         # scale query
+        depth_k_heads = self.depth_k / self.num_heads
         q *= (depth_k_heads ** -0.5)
 
         # [Batch, num_heads, height * width, depth_k or depth_v] if axis == -1
-        flat_q = K.reshape(q, K.stack([self._batch, self.num_heads, self._height * self._width, self.depth_k // self.num_heads]))
-        flat_k = K.reshape(k, K.stack([self._batch, self.num_heads, self._height * self._width, self.depth_k // self.num_heads]))
-        flat_v = K.reshape(v, K.stack([self._batch, self.num_heads, self._height * self._width, self.depth_v // self.num_heads]))
+        qk_shape = [self._batch, self.num_heads, self._height * self._width, self.depth_k // self.num_heads]
+        v_shape = [self._batch, self.num_heads, self._height * self._width, self.depth_v // self.num_heads]
+        flat_q = K.reshape(q, K.stack(qk_shape))
+        flat_k = K.reshape(k, K.stack(qk_shape))
+        flat_v = K.reshape(v, K.stack(v_shape))
 
         # [Batch, num_heads, HW, HW]
         logits = tf.matmul(flat_q, flat_k, transpose_b=True)
 
+        # Apply relative encodings
         if self.relative:
             h_rel_logits, w_rel_logits = self.relative_logits(q)
             logits += h_rel_logits
@@ -94,7 +151,7 @@ class AttentionAugmentation(Layer):
         # [batch, height, width, depth_v]
 
         if self.axis == 1:
-            # return to [batch, depth_v, height, width]
+            # return to [batch, depth_v, height, width] for channels first
             attn_out = K.permute_dimensions(attn_out, [0, 3, 1, 2])
 
         return attn_out
@@ -115,7 +172,7 @@ class AttentionAugmentation(Layer):
         width = tensor_shape[2]
         channels = tensor_shape[3]
 
-        # Save the spatial dimensions
+        # Save the spatial tensor dimensions
         self._batch = batch
         self._height = height
         self._width = width
@@ -187,7 +244,6 @@ class AttentionAugmentation(Layer):
             'depth_v': self.depth_v,
             'num_heads': self.num_heads,
             'relative': self.relative,
-            'strides': self.strides,
         }
         base_config = super(AttentionAugmentation, self).get_config()
         return dict(list(base_config.items()) + list(config.items()))
@@ -199,21 +255,13 @@ def augmented_conv2d(ip, filters, kernel_size=(3, 3), strides=(1, 1),
     input_shape = K.int_shape(ip)
     channel_axis = 1 if K.image_data_format() == 'channels_first' else -1
 
-    if type(depth_k) == float:
-        depth_k = int(input_shape[channel_axis] * depth_k)
-    else:
-        depth_k = int(depth_k)
-
-    if type(depth_v) == float:
-        depth_v = int(input_shape[channel_axis] * depth_v)
-    else:
-        depth_v = int(depth_v)
+    depth_k, depth_v = _normalize_depth_vars(depth_k, depth_v, input_shape)
 
     conv_out = _conv_layer(filters - depth_v, kernel_size, strides)(ip)
 
     # Augmented Attention Block
     qkv_conv = _conv_layer(2 * depth_k + depth_v, kernel_size, strides)(ip)
-    attn_out = AttentionAugmentation(depth_k, depth_v, num_heads, relative_encodings, strides)(qkv_conv)
+    attn_out = AttentionAugmentation(depth_k, depth_v, num_heads, relative_encodings)(qkv_conv)
     attn_out = _conv_layer(depth_v, kernel_size=(1, 1))(attn_out)
 
     output = concatenate([conv_out, attn_out], axis=channel_axis)
