@@ -251,7 +251,23 @@ class AttentionAugmentation(Layer):
 
 def augmented_conv2d(ip, filters, kernel_size=(3, 3), strides=(1, 1),
                      depth_k=0.2, depth_v=0.2, num_heads=8, relative_encodings=True):
+    """
+    Builds an Attention Augmented Convolution block.
 
+    Args:
+        ip: keras tensor.
+        filters: number of output filters.
+        kernel_size: convolution kernel size.
+        strides: strides of the convolution.
+        depth_k: float or int. Number of filters for k.
+        depth_v: float or int. Number of filters for v.
+        num_heads: int. Number of attention heads.
+        relative_encodings: bool. Whether to use relative
+            encodings or not.
+
+    Returns:
+        a keras tensor.
+    """
     input_shape = K.int_shape(ip)
     channel_axis = 1 if K.image_data_format() == 'channels_first' else -1
 
