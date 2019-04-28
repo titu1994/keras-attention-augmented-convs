@@ -41,7 +41,7 @@ def _normalize_depth_vars(depth_k, depth_v, input_shape):
     return depth_k, depth_v
 
 
-class AttentionAugmentation(Layer):
+class AttentionAugmentation2D(Layer):
 
     def __init__(self, depth_k, depth_v, num_heads, relative=True, **kwargs):
         """
@@ -66,7 +66,7 @@ class AttentionAugmentation(Layer):
             -   [Batch, Depth_V, Height, Width] if
                 channels_first data format.
         """
-        super(AttentionAugmentation, self).__init__(**kwargs)
+        super(AttentionAugmentation2D, self).__init__(**kwargs)
 
         if depth_k % num_heads != 0:
             raise ValueError('`depth_k` is not divisible by `num_heads`')
@@ -245,7 +245,7 @@ class AttentionAugmentation(Layer):
             'num_heads': self.num_heads,
             'relative': self.relative,
         }
-        base_config = super(AttentionAugmentation, self).get_config()
+        base_config = super(AttentionAugmentation2D, self).get_config()
         return dict(list(base_config.items()) + list(config.items()))
 
 
@@ -277,7 +277,7 @@ def augmented_conv2d(ip, filters, kernel_size=(3, 3), strides=(1, 1),
 
     # Augmented Attention Block
     qkv_conv = _conv_layer(2 * depth_k + depth_v, kernel_size, strides)(ip)
-    attn_out = AttentionAugmentation(depth_k, depth_v, num_heads, relative_encodings)(qkv_conv)
+    attn_out = AttentionAugmentation2D(depth_k, depth_v, num_heads, relative_encodings)(qkv_conv)
     attn_out = _conv_layer(depth_v, kernel_size=(1, 1))(attn_out)
 
     output = concatenate([conv_out, attn_out], axis=channel_axis)
