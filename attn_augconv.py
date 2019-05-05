@@ -13,7 +13,7 @@ def _conv_layer(filters, kernel_size, strides=(1, 1), padding='same', name=None)
                   use_bias=False, kernel_initializer='he_normal', name=name)
 
 
-def _normalize_depth_vars(depth_k, depth_v, input_shape):
+def _normalize_depth_vars(depth_k, depth_v, filters):
     """
     Accepts depth_k and depth_v as either floats or integers
     and normalizes them to integers.
@@ -21,20 +21,19 @@ def _normalize_depth_vars(depth_k, depth_v, input_shape):
     Args:
         depth_k: float or int.
         depth_v: float or int.
-        input_shape: tuple of ints and None.
+        filters: number of output filters.
 
     Returns:
         depth_k, depth_v as integers.
     """
-    channel_axis = 1 if K.image_data_format() == 'channels_first' else -1
 
     if type(depth_k) == float:
-        depth_k = int(input_shape[channel_axis] * depth_k)
+        depth_k = int(filters * depth_k)
     else:
         depth_k = int(depth_k)
 
     if type(depth_v) == float:
-        depth_v = int(input_shape[channel_axis] * depth_v)
+        depth_v = int(filters * depth_v)
     else:
         depth_v = int(depth_v)
 
@@ -50,10 +49,14 @@ class AttentionAugmentation2D(Layer):
 
         Args:
             depth_k: float or int. Number of filters for k.
-            depth_v: float or int. Number of filters for v.
-            num_heads: Number of attention heads. Must divide depth_k
-                and depth_v perfectly.
-            relative: bool, whether to use relative encodings.
+            Computes the number of filters for `v`.
+            If passed as float, computed as `filters * depth_k`.
+        depth_v: float or int. Number of filters for v.
+            Computes the number of filters for `k`.
+            If passed as float, computed as `filters * depth_v`.
+        num_heads: int. Number of attention heads.
+            Must be set such that `depth_k // num_heads` is > 0.
+        relative: bool, whether to use relative encodings.
 
         Raises:
             ValueError: if depth_v or depth_k is not divisible by
@@ -73,6 +76,16 @@ class AttentionAugmentation2D(Layer):
 
         if depth_v % num_heads != 0:
             raise ValueError('`depth_v` is not divisible by `num_heads`')
+
+        if depth_k // num_heads < 1.:
+            raise ValueError('depth_k / num_heads cannot be less than 1 ! '
+                             'Given depth_k = %d, num_heads = %d' % (
+                             depth_k, num_heads))
+
+        if depth_v // num_heads < 1.:
+            raise ValueError('depth_v / num_heads cannot be less than 1 ! '
+                             'Given depth_v = %d, num_heads = %d' % (
+                                 depth_v, num_heads))
 
         self.depth_k = depth_k
         self.depth_v = depth_v
@@ -95,6 +108,9 @@ class AttentionAugmentation2D(Layer):
 
         if self.relative:
             dk_per_head = self.depth_k // self.num_heads
+
+            if dk_per_head == 0:
+                print(dk_per_head)
 
             self.key_relative_w = self.add_weight('key_rel_w',
                                                   shape=[2 * width - 1, dk_per_head],
@@ -260,18 +276,23 @@ def augmented_conv2d(ip, filters, kernel_size=(3, 3), strides=(1, 1),
         kernel_size: convolution kernel size.
         strides: strides of the convolution.
         depth_k: float or int. Number of filters for k.
+            Computes the number of filters for `v`.
+            If passed as float, computed as `filters * depth_k`.
         depth_v: float or int. Number of filters for v.
+            Computes the number of filters for `k`.
+            If passed as float, computed as `filters * depth_v`.
         num_heads: int. Number of attention heads.
+            Must be set such that `depth_k // num_heads` is > 0.
         relative_encodings: bool. Whether to use relative
             encodings or not.
 
     Returns:
         a keras tensor.
     """
-    input_shape = K.int_shape(ip)
+    # input_shape = K.int_shape(ip)
     channel_axis = 1 if K.image_data_format() == 'channels_first' else -1
 
-    depth_k, depth_v = _normalize_depth_vars(depth_k, depth_v, input_shape)
+    depth_k, depth_v = _normalize_depth_vars(depth_k, depth_v, filters)
 
     conv_out = _conv_layer(filters - depth_v, kernel_size, strides)(ip)
 
@@ -290,7 +311,7 @@ if __name__ == '__main__':
 
     ip = Input(shape=(32, 32, 3))
     x = augmented_conv2d(ip, filters=20, kernel_size=(3, 3),
-                         depth_k=4, depth_v=4,  # dk/v (0.2) * f_in (20) = 4
+                         depth_k=0.2, depth_v=0.2,  # dk/v (0.2) * f_out (20) = 4
                          num_heads=4, relative_encodings=True)
 
     model = Model(ip, x)
@@ -300,4 +321,5 @@ if __name__ == '__main__':
     x = tf.zeros((1, 32, 32, 3))
     y = model(x)
     print("Attention Augmented Conv out shape : ", y.shape)
+
 
