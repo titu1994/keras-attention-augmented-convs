@@ -297,7 +297,7 @@ def augmented_conv2d(ip, filters, kernel_size=(3, 3), strides=(1, 1),
     conv_out = _conv_layer(filters - depth_v, kernel_size, strides)(ip)
 
     # Augmented Attention Block
-    qkv_conv = _conv_layer(2 * depth_k + depth_v, kernel_size, strides)(ip)
+    qkv_conv = _conv_layer(2 * depth_k + depth_v, (1, 1), strides)(ip)
     attn_out = AttentionAugmentation2D(depth_k, depth_v, num_heads, relative_encodings)(qkv_conv)
     attn_out = _conv_layer(depth_v, kernel_size=(1, 1))(attn_out)
 
