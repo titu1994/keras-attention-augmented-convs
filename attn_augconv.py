@@ -10,7 +10,7 @@ import tensorflow as tf
 
 def _conv_layer(filters, kernel_size, strides=(1, 1), padding='same', name=None):
     return Conv2D(filters, kernel_size, strides=strides, padding=padding,
-                  use_bias=False, kernel_initializer='he_normal', name=name)
+                  use_bias=True, kernel_initializer='he_normal', name=name)
 
 
 def _normalize_depth_vars(depth_k, depth_v, filters):
