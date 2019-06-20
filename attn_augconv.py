@@ -72,10 +72,12 @@ class AttentionAugmentation2D(Layer):
         super(AttentionAugmentation2D, self).__init__(**kwargs)
 
         if depth_k % num_heads != 0:
-            raise ValueError('`depth_k` is not divisible by `num_heads`')
+            raise ValueError('`depth_k` (%d) is not divisible by `num_heads` (%d)' % (
+                depth_k, num_heads))
 
         if depth_v % num_heads != 0:
-            raise ValueError('`depth_v` is not divisible by `num_heads`')
+            raise ValueError('`depth_v` (%d) is not divisible by `num_heads` (%d)' % (
+                depth_v, num_heads))
 
         if depth_k // num_heads < 1.:
             raise ValueError('depth_k / num_heads cannot be less than 1 ! '
