@@ -112,7 +112,7 @@ class AttentionAugmentation2D(Layer):
             dk_per_head = self.depth_k // self.num_heads
 
             if dk_per_head == 0:
-                print(dk_per_head)
+                print('dk per head', dk_per_head)
 
             self.key_relative_w = self.add_weight('key_rel_w',
                                                   shape=[2 * width - 1, dk_per_head],

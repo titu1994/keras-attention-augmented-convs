@@ -18,16 +18,16 @@ x = augmented_conv2d(ip, ...)
 ...
 ```
 
-If you wish to add the attention module seperately, you can do so using the `AttentionAugmentation2D` layer as well.
+If you wish to add the attention module seperately, you can do so using the `AttentionAugmentation1D` layer as well.
 
 ```python
-from attn_augconv import AttentionAugmentation2D
+from attn_augconv import AttentionAugmentation1D
 
 ip = Input(...)
 
-# make sure that input to the AttentionAugmentation2D layer has (2 * depth_k + depth_v) filters.
+# make sure that input to the AttentionAugmentation1D layer has (2 * depth_k + depth_v) filters.
 x = Conv2D(2 * depth_k + depth_v, ...)(ip)
-x = AttentionAugmentation2D(depth_k, depth_v, num_heads)(x)
+x = AttentionAugmentation1D(depth_k, depth_v, num_heads)(x)
 ...
 ```
 
