@@ -1,5 +1,6 @@
 from keras.layers import Layer
 from keras.layers import Conv2D
+from keras.layers import BatchNormalization
 from keras.layers import concatenate
 
 from keras import initializers
@@ -304,6 +305,7 @@ def augmented_conv2d(ip, filters, kernel_size=(3, 3), strides=(1, 1),
     attn_out = _conv_layer(depth_v, kernel_size=(1, 1))(attn_out)
 
     output = concatenate([conv_out, attn_out], axis=channel_axis)
+    output = BatchNormalization()(output)
     return output
 
 
