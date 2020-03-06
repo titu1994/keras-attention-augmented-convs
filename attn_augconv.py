@@ -1,12 +1,10 @@
-from keras.layers import Layer
-from keras.layers import Conv2D
-from keras.layers import BatchNormalization
-from keras.layers import concatenate
-
-from keras import initializers
-from keras import backend as K
-
 import tensorflow as tf
+from tensorflow.keras.layers import Layer
+from tensorflow.keras.layers import Conv2D
+from tensorflow.keras.layers import BatchNormalization
+from tensorflow.keras.layers import concatenate
+from tensorflow.keras import initializers
+import tensorflow.keras.backend as K
 
 
 def _conv_layer(filters, kernel_size, strides=(1, 1), padding='same', name=None):
@@ -173,6 +171,8 @@ class AttentionAugmentation2D(Layer):
             # return to [batch, depth_v, height, width] for channels first
             attn_out = K.permute_dimensions(attn_out, [0, 3, 1, 2])
 
+        attn_out.set_shape(self.compute_output_shape(self._shape))
+
         return attn_out
 
     def compute_output_shape(self, input_shape):
@@ -310,8 +310,8 @@ def augmented_conv2d(ip, filters, kernel_size=(3, 3), strides=(1, 1),
 
 
 if __name__ == '__main__':
-    from keras.layers import Input
-    from keras.models import Model
+    from tensorflow.keras.layers import Input
+    from tensorflow.keras.models import Model
 
     ip = Input(shape=(32, 32, 3))
     x = augmented_conv2d(ip, filters=20, kernel_size=(3, 3),
