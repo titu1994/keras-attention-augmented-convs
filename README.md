@@ -32,5 +32,4 @@ x = AttentionAugmentation1D(depth_k, depth_v, num_heads)(x)
 ```
 
 # Requirements
-  - Keras 2.2.4+
-  - Tensorflow 1.13+ (2.0 not tested yet)
+  - Tensorflow 2.0+
